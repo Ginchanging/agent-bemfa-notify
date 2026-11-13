@@ -1,0 +1,17 @@
+{
+  "name": "agent-bemfa-notify",
+  "owner": {
+    "name": "Ginchanging"
+  },
+  "plugins": [
+    {
+      "name": "agent-bemfa-notify",
+      "source": "./",
+      "description": "Push AI agent status to a Bemfa MQTT topic (ESP32 desk display, phone, ...)."
+    }
+  ],
+  "metadata": {
+    "description": "Push AI coding-agent status (Claude Code, Codex) to a Bemfa MQTT topic, e.g. an ESP32 desk display.",
+    "version": "1.0.0"
+  }
+}

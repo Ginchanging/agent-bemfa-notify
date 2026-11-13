@@ -1,0 +1,58 @@
+{
+  "name": "agent-bemfa-notify",
+  "displayName": "Agent → Bemfa notify",
+  "version": "1.0.0",
+  "description": "Push AI agent status (long task finished, needs your approval, API error) to a Bemfa MQTT topic, e.g. an ESP32 desk display. Hooks + an MCP tool (notify_board).",
+  "author": { "name": "Ginchanging", "url": "https://github.com/Ginchanging" },
+  "homepage": "https://github.com/Ginchanging/agent-bemfa-notify",
+  "repository": "https://github.com/Ginchanging/agent-bemfa-notify",
+  "license": "MIT",
+  "keywords": ["notification", "mqtt", "bemfa", "esp32", "hooks", "mcp"],
+  "mcpServers": {
+    "agent-notify": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/agent_notify.py", "mcp"],
+      "env": {
+        "AGENT_NOTIFY_SOURCE": "claude",
+        "AGENT_NOTIFY_BEMFA_UID": "${user_config.bemfa_uid}",
+        "AGENT_NOTIFY_TOPIC": "${user_config.topic}",
+        "AGENT_NOTIFY_DEVICE_NAME": "${user_config.device_name}",
+        "AGENT_NOTIFY_PRIVACY": "${user_config.privacy}"
+      }
+    }
+  },
+  "userConfig": {
+    "bemfa_uid": {
+      "type": "string",
+      "title": "Bemfa private key (UID)",
+      "description": "From the Bemfa console home page (cloud.bemfa.com). Stored in the system keychain. Leave empty to use `agent_notify.py setup` instead.",
+      "sensitive": true
+    },
+    "topic": {
+      "type": "string",
+      "title": "MQTT topic",
+      "description": "Create it first in the Bemfa console (MQTT device cloud).",
+      "default": "agentalert"
+    },
+    "min_seconds": {
+      "type": "number",
+      "title": "Only report turns longer than (seconds)",
+      "description": "Short Q&A turns are not pushed.",
+      "default": 60,
+      "min": 0
+    },
+    "device_name": {
+      "type": "string",
+      "title": "Device name",
+      "description": "Shown on the receiver. Defaults to the hostname.",
+      "default": ""
+    },
+    "privacy": {
+      "type": "string",
+      "title": "Message content",
+      "description": "full = include a one-line summary of the agent's last reply; minimal = only the status and project name.",
+      "options": ["full", "minimal"],
+      "default": "full"
+    }
+  }
+}
