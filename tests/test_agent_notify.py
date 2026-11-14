@@ -49,6 +49,8 @@ class AgentNotifyTest(unittest.TestCase):
         Bemfa.reply = {"code": 0, "message": "OK"}
         self.env = {
             "PATH": os.environ["PATH"], "HOME": self.tmp.name,
+            "USERPROFILE": self.tmp.name, "PYTHONUTF8": "1",
+            **({"SYSTEMROOT": os.environ["SYSTEMROOT"]} if "SYSTEMROOT" in os.environ else {}),
             "XDG_CONFIG_HOME": self.tmp.name + "/cfg", "XDG_CACHE_HOME": self.tmp.name + "/cache",
             "AGENT_NOTIFY_UID": "test-uid", "AGENT_NOTIFY_TOPIC": "agentalert",
             "AGENT_NOTIFY_DEVICE_NAME": "testbox", "AGENT_NOTIFY_MIN_SECONDS": "60",
@@ -60,7 +62,7 @@ class AgentNotifyTest(unittest.TestCase):
 
     def run_cli(self, *args, stdin="", env=None):
         return subprocess.run([sys.executable, SCRIPT, *args], input=stdin, capture_output=True,
-                              text=True, env=dict(self.env, **(env or {})), timeout=20)
+                              text=True, encoding="utf-8", env=dict(self.env, **(env or {})), timeout=20)
 
     def hook(self, agent, event, env=None):
         return self.run_cli("hook", agent, stdin=json.dumps(event), env=env)
@@ -147,7 +149,7 @@ class AgentNotifyTest(unittest.TestCase):
         r = self.hook("claude", {"hook_event_name": "Notification", "notification_type": "permission_prompt"},
                       env={"AGENT_NOTIFY_ENDPOINT": "http://127.0.0.1:9/nothing"})
         self.assertEqual(r.returncode, 0)
-        log = (Path(self.tmp.name) / "cache" / "agent-notify" / "log").read_text()
+        log = (Path(self.tmp.name) / "cache" / "agent-notify" / "log").read_text(encoding="utf-8")
         self.assertIn("40004", log)
 
     # ------------------------------------------------------------ MCP

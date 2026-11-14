@@ -6,7 +6,7 @@ AI 编程助手跑完长任务、需要你确认、或者出错时，自动推�
 
 - **支持的工具**：**Claude Code**（插件形式，内含 hooks、MCP 工具和 skill）和 **Codex CLI**（hooks + MCP）。
 - **不需要自己的服务器**：电脑直接通过 HTTPS 调用巴法云接口，设备通过 MQTT 订阅。
-- **依赖少**：单个 Python 文件，只用标准库，Python ≥ 3.9，macOS 和 Linux 都能用。
+- **依赖少**：单个 Python 文件，只用标准库，Python ≥ 3.9，支持 macOS、Linux 和 Windows（Codex）。
 - **不会影响 AI 干活**：所有 hook 都在后台运行，网络超时 4 秒，出错只写日志。
 
 ```
@@ -59,7 +59,7 @@ English summary is [below](#english).
 
 也可以不用插件，改用安装脚本：`./install.sh --claude-settings`。它会把 hooks 写进 `~/.claude/settings.json`，并用 `claude mcp add` 注册 MCP 服务。
 
-### Codex CLI
+### Codex CLI（macOS / Linux）
 
 ```sh
 git clone https://github.com/Ginchanging/agent-bemfa-notify
@@ -74,6 +74,23 @@ cd agent-bemfa-notify
 - 只**合并**自己的条目，不会覆盖你已有的 hooks，也不会改动你原有的 `notify` 设置。
 - 第一次修改前，会把原文件备份为 `*.bak-agent-notify`。
 - 卸载命令：`./install.sh --uninstall`。
+
+### Codex（Windows）
+
+在 PowerShell 中运行（需要 Python ≥ 3.9）：
+
+```powershell
+git clone https://github.com/Ginchanging/agent-bemfa-notify
+cd agent-bemfa-notify
+python -X utf8 install_windows.py --codex
+& "$env:USERPROFILE\.local\bin\agent-notify.cmd" test
+```
+
+安装器会在本机隐藏输入 UID，合并 Codex hooks 和 MCP 配置，并备份现有配置。
+安装后重启 Codex，在“设置 > Hooks”或 CLI 的 `/hooks` 中审核并信任三个新增 hook。
+默认任务阈值为 60 秒；支持后台推送、中文消息、带空格及中文的安装路径。
+
+可加 `--no-setup` 暂时跳过 UID 配置；卸载和路径说明见 [Windows 安装说明](WINDOWS-SETUP.md)。
 
 ### 其他电脑、Linux 服务器
 
@@ -167,7 +184,8 @@ MIT
      /plugin install agent-bemfa-notify@agent-bemfa-notify
      ```
      The UID is requested as a sensitive option and kept in the system keychain.
-   - **Codex:** run `./install.sh --codex`, then run `/hooks` once in codex to trust the new hooks.
+   - **Codex (macOS/Linux):** run `./install.sh --codex`, then run `/hooks` once in codex to trust the new hooks.
+   - **Codex (Windows):** run `python -X utf8 install_windows.py --codex` in PowerShell. Restart Codex and review the three hooks in Settings > Hooks or `/hooks`. See the [Windows setup guide](WINDOWS-SETUP.md) for paths, deferred setup, and uninstall.
    - **Claude Code without plugins:** run `./install.sh --claude-settings`.
 3. Test with `agent-notify test`. Logs go to `~/.cache/agent-notify/log`.
 
