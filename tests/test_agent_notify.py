@@ -123,11 +123,79 @@ class AgentNotifyTest(unittest.TestCase):
         (p,) = self.payloads()
         self.assertEqual((p["s"], p["k"], p["p"], p["m"]), ("codex", "done", "ISBFweb", "所有测试通过，已提交 PR"))
 
-    def test_codex_permission_request(self):
-        r = self.hook("codex", {"session_id": "c2", "hook_event_name": "PermissionRequest", "tool_name": "Bash"})
+    def codex_permission(self, **fields):
+        return self.hook("codex", dict(session_id="c2", turn_id="t2", cwd="/w/ESPdev",
+                                       hook_event_name="PermissionRequest", tool_name="Bash",
+                                       permission_mode="default", **fields))
+
+    def transcript(self, *contexts, suffix=""):
+        p = Path(self.tmp.name) / "rollout.jsonl"
+        p.write_text("\n".join(json.dumps({"type": "turn_context", "payload": c}) for c in contexts)
+                     + "\n" + suffix, encoding="utf-8")
+        return str(p)
+
+    def test_codex_user_permission_request_is_rate_limited(self):
+        r = self.codex_permission(approvals_reviewer="user")
+        self.codex_permission(approvals_reviewer="user")
         self.assertEqual(r.stdout, "")  # don't decide: let the normal approval prompt run
+        self.assertEqual(r.returncode, 0)
+        (p,) = self.payloads()
+        self.assertEqual((p["s"], p["k"], p["p"]), ("codex", "attention", "ESPdev"))
+
+    def test_codex_auto_review_and_unknown_requests_are_ignored(self):
+        for reviewer in ("auto_review", "guardian_subagent", "unknown", "", None):
+            with self.subTest(reviewer=reviewer):
+                r = self.codex_permission(approvals_reviewer=reviewer)
+                self.assertEqual((r.returncode, r.stdout), (0, ""))
+        self.codex_permission()  # old hook payload: no reviewer or transcript
+        self.assertEqual(Bemfa.received, [])
+        self.assertFalse((Path(self.tmp.name) / "cache/agent-notify/attn-codex-c2").exists())
+
+    def test_codex_transcript_auto_review_does_not_mute_later_user_request(self):
+        path = self.transcript({"turn_id": "t1", "approvals_reviewer": "user"},
+                               {"turn_id": "t2", "approvals_reviewer": "auto_review"})
+        self.codex_permission(transcript_path=path)
+        self.assertEqual(Bemfa.received, [])
+        path = self.transcript({"turn_id": "t2", "approvals_reviewer": "user"})
+        self.codex_permission(transcript_path=path)
         (p,) = self.payloads()
         self.assertEqual((p["s"], p["k"]), ("codex", "attention"))
+
+    def test_codex_transcript_matches_current_turn_and_ignores_other_content(self):
+        secret = "private conversation must stay on this computer"
+        suffix = json.dumps({"type": "response_item", "payload": {
+            "content": secret, "turn_id": "t2", "approvals_reviewer": "auto_review"}}) + "\n"
+        # Force the lookup to cross read-block boundaries and a malformed tail.
+        suffix += json.dumps({"type": "response_item", "payload": "x" * (128 * 1024)}) + "\n"
+        suffix += 'not JSON "turn_context"\n{"type":"turn_context","payload":'
+        path = self.transcript({"turn_id": "t2", "approvals_reviewer": "user"},
+                               {"turn_id": "other-turn", "approvals_reviewer": "auto_review"},
+                               suffix=suffix)
+        self.codex_permission(transcript_path=path)
+        (p,) = self.payloads()
+        self.assertEqual(p["k"], "attention")
+        self.assertNotIn(secret, json.dumps(Bemfa.received))
+        self.assertNotIn(secret, (Path(self.tmp.name) / "cache/agent-notify/log").read_text())
+
+    def test_codex_transcript_missing_context_or_unreadable_is_ignored(self):
+        cases = [
+            {"transcript_path": str(Path(self.tmp.name) / "missing.jsonl")},
+            {"transcript_path": self.tmp.name},  # a directory is not a transcript
+            {"transcript_path": None},
+            {"transcript_path": self.transcript({"turn_id": "old-turn", "approvals_reviewer": "user"})},
+        ]
+        for fields in cases:
+            with self.subTest(fields=fields):
+                r = self.codex_permission(**fields)
+                self.assertEqual((r.returncode, r.stdout), (0, ""))
+        path = self.transcript({"turn_id": "t2", "approvals_reviewer": "user"}, {"turn_id": "t2"})
+        self.codex_permission(transcript_path=path)  # don't reuse an older reviewer
+        self.assertEqual(Bemfa.received, [])
+
+    def test_codex_event_reviewer_takes_precedence_over_transcript(self):
+        path = self.transcript({"turn_id": "t2", "approvals_reviewer": "user"})
+        self.codex_permission(approvals_reviewer="auto_review", transcript_path=path)
+        self.assertEqual(Bemfa.received, [])
 
     # ------------------------------------------------------------ payload rules
     def test_payload_fits_256_bytes(self):

@@ -266,6 +266,45 @@ def hook_claude(event):
             send("claude", "error", f"{err}: {detail}".strip(": "), project_of(event))
 
 
+def codex_approval_reviewer(event):
+    """Resolve this turn's reviewer; permission_mode does not identify auto-review."""
+    if "approvals_reviewer" in event:
+        return event["approvals_reviewer"]
+    transcript = event.get("transcript_path")
+    turn_id = event.get("turn_id")
+    if not transcript or not turn_id:
+        return None
+    try:
+        # Current Codex hooks omit the reviewer, but the rollout records it in
+        # turn_context. Read backwards to avoid parsing a whole long session.
+        # Bound the lookup so a missing context cannot hold up the agent.
+        deadline = time.monotonic() + 1
+        with Path(transcript).open("rb") as f:
+            pos = f.seek(0, os.SEEK_END)
+            pending = b""
+            while pos and time.monotonic() < deadline:
+                size = min(pos, 64 * 1024)
+                pos -= size
+                f.seek(pos)
+                lines = (f.read(size) + pending).split(b"\n")
+                pending = lines.pop(0) if pos else b""
+                for line in reversed(lines):
+                    if b'"turn_context"' not in line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except (ValueError, UnicodeError):
+                        continue
+                    if not isinstance(record, dict) or record.get("type") != "turn_context":
+                        continue
+                    context = record.get("payload")
+                    if isinstance(context, dict) and context.get("turn_id") == turn_id:
+                        return context.get("approvals_reviewer")
+    except (OSError, TypeError, ValueError):
+        pass
+    return None
+
+
 def hook_codex(event):
     name = event.get("hook_event_name", "")
     sid = str(event.get("session_id", "nosession"))
@@ -274,6 +313,11 @@ def hook_codex(event):
     elif name == "Stop":
         on_turn_stop("codex", sid, event, event.get("last_assistant_message", ""))
     elif name == "PermissionRequest":
+        # This event precedes approval routing, including automatic review.
+        # Only a confirmed human reviewer warrants an attention notification.
+        if codex_approval_reviewer(event) != "user":
+            log("codex", "permission request: no confirmed user reviewer; skipped")
+            return
         if not rate_limited(f"attn-codex-{sid}", ATTENTION_EVERY_S):
             tool = event.get("tool_name", "")
             send("codex", "attention", f"needs approval: {tool}".strip(), project_of(event))

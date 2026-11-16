@@ -22,7 +22,7 @@ English summary is [below](#english).
 | 情况 | Claude Code | Codex | 消息里的 `k` |
 |---|---|---|---|
 | 一轮任务完成，且耗时超过阈值（默认 60 秒） | `Stop` | `Stop` | `done` |
-| 需要你批准或输入 | `Notification`（权限请求、等待输入、MCP 表单） | `PermissionRequest` | `attention` |
+| 需要你批准或输入 | `Notification`（权限请求、等待输入、MCP 表单） | `PermissionRequest`（确认由用户审批时） | `attention` |
 | 因 API 错误中断（限流、过载、认证等） | `StopFailure` | — | `error` |
 | AI 主动用 MCP 工具 `notify_board` 发的总结 | ✓ | ✓ | 由 AI 指定 |
 
@@ -30,6 +30,7 @@ English summary is [below](#english).
 
 - **短问答不推送**，只有耗时超过阈值的轮次才推。
 - **需要确认**：同一会话 2 分钟内最多推一次。
+- **Codex 自动审批不推送**：`PermissionRequest` 在 auto-review 前也会触发。hook 优先读取事件的 `approvals_reviewer`；当前 Codex 未提供该字段时，读取 `transcript_path` 中与当前 `turn_id` 匹配的 `turn_context.approvals_reviewer`。只有明确为 `user` 才推送；无法确认时跳过，不占用提醒限流额度。读取会话记录最多耗时 1 秒，且不会发送其中的对话内容。
 - **摘要**：取 AI 最后一条回复里第一句有内容的话。
 - **不重复**：如果 AI 在这一轮已经用 `notify_board` 发过总结，通用的“完成”消息就不再发。
 
@@ -170,7 +171,7 @@ MIT
 **What it pushes**
 
 - **Long turn finished** (`done`): only turns longer than `min_seconds`, 60 by default.
-- **Needs you** (`attention`): Claude Code permission or input requests; Codex `PermissionRequest`.
+- **Needs you** (`attention`): Claude Code permission or input requests; Codex `PermissionRequest` only when the event or its matching transcript turn confirms `approvals_reviewer: user`. Auto-reviewed and unknown requests are skipped without consuming the notification cooldown. Transcript lookup is limited to one second and never publishes conversation content.
 - **API error** (`error`): Claude Code `StopFailure`.
 - **Agent summary**: the agent can send its own one-line summary with the MCP tool `notify_board`. A turn that used it doesn't also get the generic "done" push.
 
